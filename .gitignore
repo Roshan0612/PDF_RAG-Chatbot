@@ -1,0 +1,90 @@
+# Python bytecode and cache
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.pyre/
+.pdm-build/
+
+# Virtual environments
+.venv/
+venv/
+ENV/
+env/
+.env/
+
+# Environment files
+.env
+.env.*
+!.env.example
+
+# IDE/editor files
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+.DS_Store
+Thumbs.db
+
+# Build / distribution artifacts
+build/
+dist/
+*.egg-info/
+.eggs/
+.Python
+pip-wheel-metadata/
+
+# Test / coverage reports
+htmlcov/
+.coverage
+.coverage.*
+.pytest_cache/
+.tox/
+.nox/
+coverage.xml
+
+# Jupyter notebooks checkpoints
+.ipynb_checkpoints/
+
+# Logs and runtime files
+*.log
+logs/
+*.sqlite3
+*.db
+
+# Local database and uploads
+uploads/
+media/
+
+# FastAPI / Uvicorn / local runtime
+*.pid
+
+# OS generated files
+.DS_Store
+Thumbs.db
+
+# mypy, pylint
+.mypy_cache/
+.pyright/
+
+# Optional: local secrets and credentials
+secrets.json
+*.pem
+*.key
+
+# If using Docker
+.docker/
+
+# If using uv / poetry / pipenv
+.uv_cache/
+.poetry/
+.pipenv/
+
+# Temporary files
+tmp/
+temp/
+
+# Node (if any frontend is later added)
+node_modules/
