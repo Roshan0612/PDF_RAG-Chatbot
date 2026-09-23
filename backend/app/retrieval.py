@@ -1,4 +1,5 @@
 from sqlalchemy import select
+from sqlalchemy.orm import joinedload
 
 from app.database import SessionLocal
 from app.embeddings import create_embedding
@@ -9,27 +10,22 @@ async def search_similar_chunks(
     query: str,
     top_k: int = 3
 ):
-    # Convert the user's question into an embedding
     query_embedding = await create_embedding(query)
 
     db = SessionLocal()
 
     try:
-        # Calculate cosine distance between the question
-        # vector and every stored chunk vector.
+
         distance = DocumentChunk.embedding.cosine_distance(
             query_embedding
         )
 
-        # Sort by distance.
-        #
-        # Smaller distance = more similar
-        #
-        # limit(top_k) means we only return the best
-        # few matching chunks.
         statement = (
-            select(
-                DocumentChunk,
+            select(DocumentChunk)
+            .options(
+                joinedload(DocumentChunk.document)
+            )
+            .add_columns(
                 distance.label("distance")
             )
             .order_by(distance)

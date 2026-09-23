@@ -1,7 +1,7 @@
 from fastapi import FastAPI
 from sqlalchemy import text
 from app.retrieval import search_similar_chunks
-
+from app.llm import generate_answer
 from app.similarity import cosine_similarity
 
 from app.database import Base, SessionLocal, engine
@@ -123,6 +123,54 @@ async def search(
                 "chunk_id": chunk.id,
                 "content": chunk.content,
                 "page_number": chunk.page_number,
+                "distance": float(distance)
+            }
+            for chunk, distance in results
+        ]
+    }
+
+@app.get("/rag")
+async def rag(
+    question: str,
+    top_k: int = 3
+):
+    # Step 1:
+    # Find relevant chunks from the database
+    results = await search_similar_chunks(
+        query=question,
+        top_k=top_k
+    )
+
+    # Step 2:
+    # Extract the text from the retrieved chunks
+    context_parts = []
+
+    for chunk, distance in results:
+
+        context_parts.append(
+            f"[Source: {chunk.document.filename}, "
+            f"Page: {chunk.page_number}]\n"
+            f"{chunk.content}"
+        )
+
+    # Combine all chunks into one context
+    context = "\n\n".join(context_parts)
+
+    # Step 3:
+    # Send question + retrieved context to the LLM
+    answer = await generate_answer(
+        question=question,
+        context=context
+    )
+
+    return {
+        "question": question,
+        "answer": answer,
+        "sources": [
+            {
+                "chunk_id": chunk.id,
+                "document": chunk.document.filename,
+                "page": chunk.page_number,
                 "distance": float(distance)
             }
             for chunk, distance in results
