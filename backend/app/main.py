@@ -7,6 +7,11 @@ from app.similarity import cosine_similarity
 from app.database import Base, SessionLocal, engine
 from app.embeddings import create_embedding
 from app.models import Document, DocumentChunk
+from pathlib import Path
+
+from fastapi import UploadFile, File, HTTPException
+
+from app.ingestion import create_chunks_from_pdf
 
 app = FastAPI()
 
@@ -175,4 +180,34 @@ async def rag(
             }
             for chunk, distance in results
         ]
+    }
+
+@app.post("/ingest-pdf")
+async def ingest_pdf(
+    file: UploadFile = File(...)
+):
+
+    if file.content_type != "application/pdf":
+        raise HTTPException(
+            status_code=400,
+            detail="Only PDF files are supported"
+        )
+
+    upload_dir = Path("uploads")
+    upload_dir.mkdir(exist_ok=True)
+
+    file_path = upload_dir / file.filename
+
+    contents = await file.read()
+
+    file_path.write_bytes(contents)
+
+    chunks = create_chunks_from_pdf(
+        str(file_path)
+    )
+
+    return {
+        "filename": file.filename,
+        "chunks": len(chunks),
+        "preview": chunks[:3]
     }
