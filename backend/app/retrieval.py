@@ -9,7 +9,8 @@ from app.models import DocumentChunk
 async def search_similar_chunks(
     query: str,
     top_k: int = 3,
-    max_distance: float | None = None
+    max_distance: float | None = None,
+    document_id: int | None = None
 ):
     query_embedding = await create_embedding(query)
 
@@ -29,6 +30,11 @@ async def search_similar_chunks(
                 distance.label("distance")
             )
         )
+
+        if document_id is not None:
+            statement = statement.where(
+                DocumentChunk.document_id == document_id
+            )
 
         if max_distance is not None:
             statement = statement.where(

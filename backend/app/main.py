@@ -114,12 +114,15 @@ async def create_test_document():
 @app.get("/search")
 async def search(
     query: str,
-    top_k: int = 3
+    top_k: int = 3,
+    max_distance: float | None = None,
+    document_id: int | None = None
 ):
     results = await search_similar_chunks(
         query=query,
         top_k=top_k,
-         max_distance=max_distance
+        max_distance=max_distance,
+        document_id=document_id
     )
 
     return {
@@ -139,12 +142,14 @@ async def search(
 async def rag(
     question: str,
     top_k: int = 3,
-    max_distance: float = 0.4
+    max_distance: float = 0.4,
+    document_id: int | None = None
 ):
     results = await search_similar_chunks(
         query=question,
         top_k=top_k,
-        max_distance=max_distance
+        max_distance=max_distance,
+        document_id=document_id
     )
 
     if not results:
@@ -274,6 +279,68 @@ async def ingest_pdf(
             "filename": document.filename,
             "chunks": len(chunks)
         }
+
+    except Exception:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()
+
+@app.get("/documents")
+def get_documents():
+    db = SessionLocal()
+
+    try:
+        documents = db.query(Document).order_by(
+            Document.id
+        ).all()
+
+        return {
+            "documents": [
+                {
+                    "id": document.id,
+                    "filename": document.filename,
+                    "chunks": len(document.chunks)
+                }
+                for document in documents
+            ]
+        }
+
+    finally:
+        db.close()
+
+@app.delete("/documents/{document_id}")
+def delete_document(
+    document_id: int
+):
+    db = SessionLocal()
+
+    try:
+        document = db.get(
+            Document,
+            document_id
+        )
+
+        if document is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Document not found"
+            )
+
+        filename = document.filename
+
+        db.delete(document)
+        db.commit()
+
+        return {
+            "message": "Document deleted successfully",
+            "document_id": document_id,
+            "filename": filename
+        }
+
+    except HTTPException:
+        raise
 
     except Exception:
         db.rollback()
