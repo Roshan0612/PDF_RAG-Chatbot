@@ -186,28 +186,96 @@ async def rag(
 async def ingest_pdf(
     file: UploadFile = File(...)
 ):
-
+    # Only allow PDF files
     if file.content_type != "application/pdf":
         raise HTTPException(
             status_code=400,
             detail="Only PDF files are supported"
         )
 
+    # Store uploaded PDFs locally for now
     upload_dir = Path("uploads")
     upload_dir.mkdir(exist_ok=True)
 
-    file_path = upload_dir / file.filename
+    # Path(...).name prevents directory traversal
+    safe_filename = Path(file.filename).name
 
+    file_path = upload_dir / safe_filename
+
+    # Read uploaded PDF
     contents = await file.read()
 
+    # Save PDF locally
     file_path.write_bytes(contents)
 
+    # PDF -> pages -> chunks
     chunks = create_chunks_from_pdf(
         str(file_path)
     )
 
-    return {
-        "filename": file.filename,
-        "chunks": len(chunks),
-        "preview": chunks[:3]
-    }
+    if not chunks:
+        raise HTTPException(
+            status_code=400,
+            detail="No extractable text found in the PDF"
+        )
+
+    db = SessionLocal()
+
+    try:
+        # -----------------------------------------
+        # STEP 1: Create Document row
+        # -----------------------------------------
+
+        document = Document(
+            filename=safe_filename
+        )
+
+        db.add(document)
+
+        # Send INSERT to PostgreSQL so document.id
+        # becomes available, but do NOT commit yet.
+        db.flush()
+
+        # -----------------------------------------
+        # STEP 2: Process every chunk
+        # -----------------------------------------
+
+        for chunk_data in chunks:
+
+            content = chunk_data["content"]
+            page_number = chunk_data["page_number"]
+
+            # Text -> embedding
+            embedding = await create_embedding(
+                content
+            )
+
+            # Create database chunk row
+            document_chunk = DocumentChunk(
+                document_id=document.id,
+                content=content,
+                page_number=page_number,
+                embedding=embedding
+            )
+
+            db.add(document_chunk)
+
+        # -----------------------------------------
+        # STEP 3: Commit everything together
+        # -----------------------------------------
+
+        db.commit()
+
+        return {
+            "message": "PDF ingested successfully",
+            "document_id": document.id,
+            "filename": document.filename,
+            "chunks": len(chunks)
+        }
+
+    except Exception:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()
