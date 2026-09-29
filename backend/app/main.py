@@ -161,15 +161,32 @@ async def rag(
         }
 
     context_parts = []
+    sources = []
 
-    for chunk, distance in results:
+    for index, (chunk, distance) in enumerate(
+        results,
+        start=1
+    ):
+        source_id = f"S{index}"
+
         context_parts.append(
-            f"[Source: {chunk.document.filename}, "
-            f"Page: {chunk.page_number}]\n"
+            f"[{source_id}]\n"
+            f"Document: {chunk.document.filename}\n"
+            f"Page: {chunk.page_number}\n"
             f"{chunk.content}"
         )
 
-    context = "\n\n".join(context_parts)
+        sources.append({
+            "source_id": source_id,
+            "chunk_id": chunk.id,
+            "document": chunk.document.filename,
+            "page": chunk.page_number,
+            "distance": float(distance)
+        })
+
+    context = "\n\n".join(
+        context_parts
+    )
 
     answer = await generate_answer(
         question=question,
@@ -179,15 +196,7 @@ async def rag(
     return {
         "question": question,
         "answer": answer,
-        "sources": [
-            {
-                "chunk_id": chunk.id,
-                "document": chunk.document.filename,
-                "page": chunk.page_number,
-                "distance": float(distance)
-            }
-            for chunk, distance in results
-        ]
+        "sources": sources
     }
 
 @app.post("/ingest-pdf")

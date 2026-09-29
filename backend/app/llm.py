@@ -11,11 +11,20 @@ async def generate_answer(
 ) -> str:
 
     prompt = f"""
-You are a helpful assistant answering questions from a provided document.
+You are answering a question using retrieved document context.
 
 Use ONLY the information provided in the context.
 
-If the answer cannot be found in the context, say:
+When you use information from a source, cite its source ID
+directly in the answer using the format [S1], [S2], etc.
+
+Do not cite a source unless it supports the statement.
+
+If multiple sources support a statement, you may cite multiple
+sources like [S1][S2].
+
+If the answer cannot be found in the context, respond exactly:
+
 "I don't know based on the provided documents."
 
 Do not make up information.
