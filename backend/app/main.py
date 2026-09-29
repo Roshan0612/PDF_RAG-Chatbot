@@ -13,10 +13,24 @@ from fastapi import UploadFile, File, HTTPException
 
 from app.ingestion import create_chunks_from_pdf
 import hashlib
+from pydantic import BaseModel
+from app.evaluation import evaluate_retrieval_case
+
 
 app = FastAPI()
 
 Base.metadata.create_all(bind=engine)
+
+class RetrievalEvaluationCase(BaseModel):
+    query: str
+    expected_document_id: int
+    expected_page: int | None = None
+
+
+class RetrievalEvaluationRequest(BaseModel):
+    cases: list[RetrievalEvaluationCase]
+    top_k: int = 3
+    max_distance: float | None = None
 
 @app.get("/")
 def root():
@@ -393,3 +407,54 @@ def delete_document(
 
     finally:
         db.close()
+
+
+@app.post("/evaluate-retrieval")
+async def evaluate_retrieval(
+    request: RetrievalEvaluationRequest
+):
+    results = []
+
+    for case in request.cases:
+        result = await evaluate_retrieval_case(
+            query=case.query,
+            expected_document_id=case.expected_document_id,
+            expected_page=case.expected_page,
+            top_k=request.top_k,
+            max_distance=request.max_distance
+        )
+
+        results.append(result)
+
+    total_cases = len(results)
+
+    hits = sum(
+        1
+        for result in results
+        if result["hit"]
+    )
+
+    hit_rate = (
+        hits / total_cases
+        if total_cases
+        else 0
+    )
+
+    mrr = (
+        sum(
+            result["reciprocal_rank"]
+            for result in results
+        ) / total_cases
+        if total_cases
+        else 0
+    )
+
+    return {
+        "total_cases": total_cases,
+        "hits": hits,
+        "hit_rate": hit_rate,
+        "mrr": mrr,
+        "top_k": request.top_k,
+        "max_distance": request.max_distance,
+        "results": results
+    }
