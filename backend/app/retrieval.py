@@ -8,14 +8,14 @@ from app.models import DocumentChunk
 
 async def search_similar_chunks(
     query: str,
-    top_k: int = 3
+    top_k: int = 3,
+    max_distance: float | None = None
 ):
     query_embedding = await create_embedding(query)
 
     db = SessionLocal()
 
     try:
-
         distance = DocumentChunk.embedding.cosine_distance(
             query_embedding
         )
@@ -28,13 +28,20 @@ async def search_similar_chunks(
             .add_columns(
                 distance.label("distance")
             )
+        )
+
+        if max_distance is not None:
+            statement = statement.where(
+                distance <= max_distance
+            )
+
+        statement = (
+            statement
             .order_by(distance)
             .limit(top_k)
         )
 
-        results = db.execute(statement).all()
-
-        return results
+        return db.execute(statement).all()
 
     finally:
         db.close()

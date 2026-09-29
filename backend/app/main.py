@@ -118,7 +118,8 @@ async def search(
 ):
     results = await search_similar_chunks(
         query=query,
-        top_k=top_k
+        top_k=top_k,
+         max_distance=max_distance
     )
 
     return {
@@ -126,6 +127,7 @@ async def search(
         "results": [
             {
                 "chunk_id": chunk.id,
+                "document": chunk.document.filename,
                 "content": chunk.content,
                 "page_number": chunk.page_number,
                 "distance": float(distance)
@@ -133,36 +135,36 @@ async def search(
             for chunk, distance in results
         ]
     }
-
 @app.get("/rag")
 async def rag(
     question: str,
-    top_k: int = 3
+    top_k: int = 3,
+    max_distance: float = 0.4
 ):
-    # Step 1:
-    # Find relevant chunks from the database
     results = await search_similar_chunks(
         query=question,
-        top_k=top_k
+        top_k=top_k,
+        max_distance=max_distance
     )
 
-    # Step 2:
-    # Extract the text from the retrieved chunks
+    if not results:
+        return {
+            "question": question,
+            "answer": "I don't know based on the provided documents.",
+            "sources": []
+        }
+
     context_parts = []
 
     for chunk, distance in results:
-
         context_parts.append(
             f"[Source: {chunk.document.filename}, "
             f"Page: {chunk.page_number}]\n"
             f"{chunk.content}"
         )
 
-    # Combine all chunks into one context
     context = "\n\n".join(context_parts)
 
-    # Step 3:
-    # Send question + retrieved context to the LLM
     answer = await generate_answer(
         question=question,
         context=context
