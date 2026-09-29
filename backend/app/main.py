@@ -1,5 +1,5 @@
 from fastapi import FastAPI
-from sqlalchemy import text
+from sqlalchemy import select,text
 from app.retrieval import search_similar_chunks
 from app.llm import generate_answer
 from app.similarity import cosine_similarity
@@ -12,6 +12,7 @@ from pathlib import Path
 from fastapi import UploadFile, File, HTTPException
 
 from app.ingestion import create_chunks_from_pdf
+import hashlib
 
 app = FastAPI()
 
@@ -193,95 +194,117 @@ async def rag(
 async def ingest_pdf(
     file: UploadFile = File(...)
 ):
-    # Only allow PDF files
     if file.content_type != "application/pdf":
         raise HTTPException(
             status_code=400,
             detail="Only PDF files are supported"
         )
 
-    # Store uploaded PDFs locally for now
-    upload_dir = Path("uploads")
-    upload_dir.mkdir(exist_ok=True)
+    safe_filename = Path(
+        file.filename or "document.pdf"
+    ).name
 
-    # Path(...).name prevents directory traversal
-    safe_filename = Path(file.filename).name
-
-    file_path = upload_dir / safe_filename
-
-    # Read uploaded PDF
     contents = await file.read()
 
-    # Save PDF locally
-    file_path.write_bytes(contents)
-
-    # PDF -> pages -> chunks
-    chunks = create_chunks_from_pdf(
-        str(file_path)
-    )
-
-    if not chunks:
-        raise HTTPException(
-            status_code=400,
-            detail="No extractable text found in the PDF"
-        )
+    file_hash = hashlib.sha256(
+        contents
+    ).hexdigest()
 
     db = SessionLocal()
 
+    file_path = None
+
     try:
-        # -----------------------------------------
-        # STEP 1: Create Document row
-        # -----------------------------------------
+        existing_document = db.execute(
+            select(Document).where(
+                Document.file_hash == file_hash
+            )
+        ).scalar_one_or_none()
+
+        if existing_document:
+            raise HTTPException(
+                status_code=409,
+                detail=(
+                    f"Document already exists with "
+                    f"id {existing_document.id}"
+                )
+            )
+
+        upload_dir = Path("uploads")
+        upload_dir.mkdir(exist_ok=True)
+
+        storage_name = (
+            f"{file_hash[:12]}_{safe_filename}"
+        )
+
+        file_path = upload_dir / storage_name
+
+        file_path.write_bytes(contents)
+
+        chunks = create_chunks_from_pdf(
+            str(file_path)
+        )
+
+        if not chunks:
+            raise HTTPException(
+                status_code=400,
+                detail="No extractable text found in PDF"
+            )
 
         document = Document(
-            filename=safe_filename
+            filename=safe_filename,
+            storage_name=storage_name,
+            file_hash=file_hash,
+            file_size=len(contents),
+            content_type=file.content_type
         )
 
         db.add(document)
-
-        # Send INSERT to PostgreSQL so document.id
-        # becomes available, but do NOT commit yet.
         db.flush()
 
-        # -----------------------------------------
-        # STEP 2: Process every chunk
-        # -----------------------------------------
-
-        for chunk_data in chunks:
-
-            content = chunk_data["content"]
-            page_number = chunk_data["page_number"]
-
-            # Text -> embedding
+        for chunk_index, chunk_data in enumerate(
+            chunks,
+            start=1
+        ):
             embedding = await create_embedding(
-                content
+                chunk_data["content"]
             )
 
-            # Create database chunk row
             document_chunk = DocumentChunk(
                 document_id=document.id,
-                content=content,
-                page_number=page_number,
+                chunk_index=chunk_index,
+                content=chunk_data["content"],
+                page_number=chunk_data["page_number"],
                 embedding=embedding
             )
 
             db.add(document_chunk)
 
-        # -----------------------------------------
-        # STEP 3: Commit everything together
-        # -----------------------------------------
-
         db.commit()
+        db.refresh(document)
 
         return {
             "message": "PDF ingested successfully",
             "document_id": document.id,
             "filename": document.filename,
-            "chunks": len(chunks)
+            "chunks": len(chunks),
+            "file_size": document.file_size
         }
+
+    except HTTPException:
+        db.rollback()
+
+        if file_path and file_path.exists():
+            file_path.unlink()
+
+        raise
 
     except Exception:
         db.rollback()
+
+        if file_path and file_path.exists():
+            file_path.unlink()
+
         raise
 
     finally:
@@ -292,15 +315,19 @@ def get_documents():
     db = SessionLocal()
 
     try:
-        documents = db.query(Document).order_by(
-            Document.id
-        ).all()
+        documents = db.execute(
+            select(Document)
+            .order_by(Document.id)
+        ).scalars().all()
 
         return {
             "documents": [
                 {
                     "id": document.id,
                     "filename": document.filename,
+                    "file_size": document.file_size,
+                    "content_type": document.content_type,
+                    "created_at": document.created_at,
                     "chunks": len(document.chunks)
                 }
                 for document in documents
@@ -329,9 +356,18 @@ def delete_document(
             )
 
         filename = document.filename
+        storage_name = document.storage_name
 
         db.delete(document)
         db.commit()
+
+        if storage_name:
+            file_path = (
+                Path("uploads") / storage_name
+            )
+
+            if file_path.exists():
+                file_path.unlink()
 
         return {
             "message": "Document deleted successfully",

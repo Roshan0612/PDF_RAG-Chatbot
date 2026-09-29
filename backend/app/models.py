@@ -1,4 +1,13 @@
-from sqlalchemy import ForeignKey, Integer, String, Text
+from datetime import datetime, timezone
+
+from sqlalchemy import (
+    BigInteger,
+    DateTime,
+    ForeignKey,
+    Integer,
+    String,
+    Text
+)
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from pgvector.sqlalchemy import Vector
@@ -18,6 +27,33 @@ class Document(Base):
         String(255)
     )
 
+    storage_name: Mapped[str | None] = mapped_column(
+        String(320),
+        nullable=True
+    )
+
+    file_hash: Mapped[str | None] = mapped_column(
+        String(64),
+        unique=True,
+        index=True,
+        nullable=True
+    )
+
+    file_size: Mapped[int | None] = mapped_column(
+        BigInteger,
+        nullable=True
+    )
+
+    content_type: Mapped[str | None] = mapped_column(
+        String(100),
+        nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc)
+    )
+
     chunks: Mapped[list["DocumentChunk"]] = relationship(
         back_populates="document",
         cascade="all, delete-orphan"
@@ -33,7 +69,13 @@ class DocumentChunk(Base):
     )
 
     document_id: Mapped[int] = mapped_column(
-        ForeignKey("documents.id")
+        ForeignKey("documents.id"),
+        index=True
+    )
+
+    chunk_index: Mapped[int | None] = mapped_column(
+        Integer,
+        nullable=True
     )
 
     content: Mapped[str] = mapped_column(
@@ -45,9 +87,6 @@ class DocumentChunk(Base):
         nullable=True
     )
 
-    # nomic-embed-text produces our embedding vector.
-    # We'll confirm the exact dimension from Ollama
-    # before creating the database table.
     embedding: Mapped[list[float] | None] = mapped_column(
         Vector(768),
         nullable=True
