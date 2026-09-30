@@ -19,6 +19,7 @@ export type ChatMessage = {
   id?: number;
   role: "user" | "assistant";
   content: string;
+  created_at?: string;
   sources?: Source[];
 };
 
@@ -28,4 +29,11 @@ export type ChatResponse = {
   answer: string;
   context_tokens: number;
   sources: Source[];
+};
+
+export type ChatSession = {
+  id: number;
+  document_id: number | null;
+  created_at: string;
+  message_count: number;
 };

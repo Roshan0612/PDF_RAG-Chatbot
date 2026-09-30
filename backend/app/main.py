@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
-from sqlalchemy import select,text
+from sqlalchemy import func, select, text
 from app.retrieval import search_similar_chunks
 from app.llm import generate_answer
 from app.similarity import cosine_similarity
@@ -28,6 +28,7 @@ from pydantic import BaseModel
 from app.evaluation import evaluate_retrieval_case
 
 from app.context_builder import build_context
+
 
 app = FastAPI()
 
@@ -678,6 +679,99 @@ def get_chat_messages(
                 for message in messages
             ]
         }
+
+    finally:
+        db.close()
+
+
+@app.get("/chat/sessions")
+def get_chat_sessions(
+    document_id: int | None = None
+):
+    db = SessionLocal()
+
+    try:
+        message_count = (
+            select(
+                func.count(ChatMessage.id)
+            )
+            .where(
+                ChatMessage.session_id
+                == ChatSession.id
+            )
+            .correlate(ChatSession)
+            .scalar_subquery()
+        )
+
+        statement = (
+            select(
+                ChatSession,
+                message_count.label(
+                    "message_count"
+                )
+            )
+            .order_by(
+                ChatSession.created_at.desc()
+            )
+        )
+
+        if document_id is not None:
+            statement = statement.where(
+                ChatSession.document_id
+                == document_id
+            )
+
+        results = db.execute(
+            statement
+        ).all()
+
+        return {
+            "sessions": [
+                {
+                    "id": session.id,
+                    "document_id": session.document_id,
+                    "created_at": session.created_at,
+                    "message_count": count
+                }
+                for session, count in results
+            ]
+        }
+
+    finally:
+        db.close()
+
+@app.delete("/chat/sessions/{session_id}")
+def delete_chat_session(
+    session_id: int
+):
+    db = SessionLocal()
+
+    try:
+        session = db.get(
+            ChatSession,
+            session_id
+        )
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Chat session not found"
+            )
+
+        db.delete(session)
+        db.commit()
+
+        return {
+            "message": "Chat session deleted",
+            "session_id": session_id
+        }
+
+    except HTTPException:
+        raise
+
+    except Exception:
+        db.rollback()
+        raise
 
     finally:
         db.close()
