@@ -1,0 +1,31 @@
+export type Document = {
+  id: number;
+  filename: string;
+  file_size: number | null;
+  content_type: string | null;
+  created_at: string | null;
+  chunks: number;
+};
+
+export type Source = {
+  source_id: string;
+  chunk_id: number;
+  document: string;
+  page: number | null;
+  distance: number;
+};
+
+export type ChatMessage = {
+  id?: number;
+  role: "user" | "assistant";
+  content: string;
+  sources?: Source[];
+};
+
+export type ChatResponse = {
+  session_id: number;
+  question: string;
+  answer: string;
+  context_tokens: number;
+  sources: Source[];
+};
