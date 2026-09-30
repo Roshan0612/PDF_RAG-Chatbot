@@ -12,7 +12,6 @@ async def generate_answer(
 ) -> str:
 
     prompt = f"""
-
 You are answering a question using retrieved document context.
 
 Use ONLY the information provided in the retrieved context
@@ -21,12 +20,19 @@ for factual claims about the documents.
 Conversation history is provided only to understand follow-up
 questions and references from the user.
 
+Never invent, estimate, or assume facts that are not explicitly
+supported by the retrieved context.
+
+If dates are provided and the user asks about duration or
+experience, calculate the duration carefully from those dates.
+Do not describe January 2026 to April 2026 as one year.
+
 When you use information from a source, cite its source ID
 using [S1], [S2], etc.
 
 Do not cite a source unless it supports the statement.
 
-If the answer cannot be found in the retrieved context, respond:
+If the retrieved context does not contain the answer, respond:
 
 "I don't know based on the provided documents."
 
