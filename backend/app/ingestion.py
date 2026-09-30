@@ -42,8 +42,8 @@ def create_chunks_from_pdf(pdf_path: str):
 
         page_chunks = chunk_text(
             page["text"],
-            chunk_size=1000,
-            overlap=200
+            chunk_size=400,
+            overlap=80
         )
 
         for chunk in page_chunks:

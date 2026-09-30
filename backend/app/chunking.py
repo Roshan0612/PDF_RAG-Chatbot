@@ -1,27 +1,39 @@
 import re
 
+from app.tokenization import (
+    count_tokens,
+    decode_tokens,
+    encode_tokens
+)
+
 
 def _split_long_text(
     text: str,
     chunk_size: int,
     overlap: int
 ) -> list[str]:
+    tokens = encode_tokens(text)
+
     chunks = []
 
     start = 0
 
-    while start < len(text):
+    while start < len(tokens):
         end = min(
             start + chunk_size,
-            len(text)
+            len(tokens)
         )
 
-        chunk = text[start:end].strip()
+        chunk_tokens = tokens[start:end]
+
+        chunk = decode_tokens(
+            chunk_tokens
+        ).strip()
 
         if chunk:
             chunks.append(chunk)
 
-        if end == len(text):
+        if end == len(tokens):
             break
 
         start = end - overlap
@@ -31,8 +43,8 @@ def _split_long_text(
 
 def chunk_text(
     text: str,
-    chunk_size: int = 1000,
-    overlap: int = 200
+    chunk_size: int = 400,
+    overlap: int = 80
 ) -> list[str]:
     if chunk_size <= 0:
         raise ValueError(
@@ -68,9 +80,16 @@ def chunk_text(
             paragraph
         )
 
-        if len(paragraph) > chunk_size:
+        paragraph_tokens = count_tokens(
+            paragraph
+        )
+
+        if paragraph_tokens > chunk_size:
             if current_chunk:
-                chunks.append(current_chunk)
+                chunks.append(
+                    current_chunk
+                )
+
                 current_chunk = ""
 
             chunks.extend(
@@ -89,17 +108,24 @@ def chunk_text(
             else paragraph
         )
 
-        if len(candidate) <= chunk_size:
+        if count_tokens(candidate) <= chunk_size:
             current_chunk = candidate
             continue
 
-        chunks.append(current_chunk)
-
-        overlap_text = (
-            current_chunk[-overlap:].strip()
-            if overlap
-            else ""
+        chunks.append(
+            current_chunk
         )
+
+        if overlap:
+            current_tokens = encode_tokens(
+                current_chunk
+            )
+
+            overlap_text = decode_tokens(
+                current_tokens[-overlap:]
+            ).strip()
+        else:
+            overlap_text = ""
 
         candidate = (
             f"{overlap_text}\n\n{paragraph}"
@@ -107,12 +133,14 @@ def chunk_text(
             else paragraph
         )
 
-        if len(candidate) <= chunk_size:
+        if count_tokens(candidate) <= chunk_size:
             current_chunk = candidate
         else:
             current_chunk = paragraph
 
     if current_chunk:
-        chunks.append(current_chunk)
+        chunks.append(
+            current_chunk
+        )
 
     return chunks

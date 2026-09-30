@@ -16,6 +16,7 @@ import hashlib
 from pydantic import BaseModel
 from app.evaluation import evaluate_retrieval_case
 
+from app.context_builder import build_context
 
 app = FastAPI()
 
@@ -158,7 +159,8 @@ async def rag(
     question: str,
     top_k: int = 3,
     max_distance: float = 0.4,
-    document_id: int | None = None
+    document_id: int | None = None,
+    max_context_tokens: int = 2000
 ):
     results = await search_similar_chunks(
         query=question,
@@ -174,45 +176,29 @@ async def rag(
             "sources": []
         }
 
-    context_parts = []
-    sources = []
-
-    for index, (chunk, distance) in enumerate(
+    context_data = build_context(
         results,
-        start=1
-    ):
-        source_id = f"S{index}"
-
-        context_parts.append(
-            f"[{source_id}]\n"
-            f"Document: {chunk.document.filename}\n"
-            f"Page: {chunk.page_number}\n"
-            f"{chunk.content}"
-        )
-
-        sources.append({
-            "source_id": source_id,
-            "chunk_id": chunk.id,
-            "document": chunk.document.filename,
-            "page": chunk.page_number,
-            "distance": float(distance)
-        })
-
-    context = "\n\n".join(
-        context_parts
+        max_tokens=max_context_tokens
     )
+
+    if not context_data["context"]:
+        return {
+            "question": question,
+            "answer": "I don't know based on the provided documents.",
+            "sources": []
+        }
 
     answer = await generate_answer(
         question=question,
-        context=context
+        context=context_data["context"]
     )
 
     return {
         "question": question,
         "answer": answer,
-        "sources": sources
+        "context_tokens": context_data["tokens"],
+        "sources": context_data["sources"]
     }
-
 @app.post("/ingest-pdf")
 async def ingest_pdf(
     file: UploadFile = File(...)
