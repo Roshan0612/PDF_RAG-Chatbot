@@ -7,34 +7,42 @@ LLM_MODEL = "llama3.2:3b"
 
 async def generate_answer(
     question: str,
-    context: str
+    context: str,
+    chat_history: str = ""
 ) -> str:
 
     prompt = f"""
+
 You are answering a question using retrieved document context.
 
-Use ONLY the information provided in the context.
+Use ONLY the information provided in the retrieved context
+for factual claims about the documents.
+
+Conversation history is provided only to understand follow-up
+questions and references from the user.
 
 When you use information from a source, cite its source ID
-directly in the answer using the format [S1], [S2], etc.
+using [S1], [S2], etc.
 
 Do not cite a source unless it supports the statement.
 
-If multiple sources support a statement, you may cite multiple
-sources like [S1][S2].
-
-If the answer cannot be found in the context, respond exactly:
+If the answer cannot be found in the retrieved context, respond:
 
 "I don't know based on the provided documents."
 
 Do not make up information.
 
-Context:
+Conversation history:
+--------------------
+{chat_history}
+--------------------
+
+Retrieved context:
 --------------------
 {context}
 --------------------
 
-Question:
+Current question:
 {question}
 
 Answer:

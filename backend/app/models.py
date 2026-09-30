@@ -95,3 +95,61 @@ class DocumentChunk(Base):
     document: Mapped["Document"] = relationship(
         back_populates="chunks"
     )
+
+
+class ChatSession(Base):
+    __tablename__ = "chat_sessions"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True
+    )
+
+    document_id: Mapped[int | None] = mapped_column(
+        ForeignKey(
+            "documents.id",
+            ondelete="SET NULL"
+        ),
+        nullable=True
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    messages: Mapped[list["ChatMessage"]] = relationship(
+        back_populates="session",
+        cascade="all, delete-orphan"
+    )
+
+
+class ChatMessage(Base):
+    __tablename__ = "chat_messages"
+
+    id: Mapped[int] = mapped_column(
+        Integer,
+        primary_key=True
+    )
+
+    session_id: Mapped[int] = mapped_column(
+        ForeignKey("chat_sessions.id"),
+        index=True
+    )
+
+    role: Mapped[str] = mapped_column(
+        String(20)
+    )
+
+    content: Mapped[str] = mapped_column(
+        Text
+    )
+
+    created_at: Mapped[datetime] = mapped_column(
+        DateTime(timezone=True),
+        default=lambda: datetime.now(timezone.utc)
+    )
+
+    session: Mapped["ChatSession"] = relationship(
+        back_populates="messages"
+    )

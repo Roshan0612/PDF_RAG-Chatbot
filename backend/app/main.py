@@ -6,7 +6,16 @@ from app.similarity import cosine_similarity
 
 from app.database import Base, SessionLocal, engine
 from app.embeddings import create_embedding
-from app.models import Document, DocumentChunk
+from app.models import (
+    ChatMessage,
+    ChatSession,
+    Document,
+    DocumentChunk
+)
+from app.conversation import (
+    build_chat_history,
+    build_retrieval_query
+)
 from pathlib import Path
 
 from fastapi import UploadFile, File, HTTPException
@@ -14,6 +23,7 @@ from fastapi import UploadFile, File, HTTPException
 from app.ingestion import create_chunks_from_pdf
 import hashlib
 from pydantic import BaseModel
+
 from app.evaluation import evaluate_retrieval_case
 
 from app.context_builder import build_context
@@ -32,6 +42,18 @@ class RetrievalEvaluationRequest(BaseModel):
     cases: list[RetrievalEvaluationCase]
     top_k: int = 3
     max_distance: float | None = None
+
+class CreateChatSessionRequest(BaseModel):
+    document_id: int | None = None
+
+
+class ChatRequest(BaseModel):
+    session_id: int
+    message: str
+    top_k: int = 3
+    max_distance: float = 0.4
+    max_context_tokens: int = 2000
+
 
 @app.get("/")
 def root():
@@ -444,3 +466,207 @@ async def evaluate_retrieval(
         "max_distance": request.max_distance,
         "results": results
     }
+
+
+@app.post("/chat/sessions")
+def create_chat_session(
+    request: CreateChatSessionRequest
+):
+    db = SessionLocal()
+
+    try:
+        if request.document_id is not None:
+            document = db.get(
+                Document,
+                request.document_id
+            )
+
+            if document is None:
+                raise HTTPException(
+                    status_code=404,
+                    detail="Document not found"
+                )
+
+        session = ChatSession(
+            document_id=request.document_id
+        )
+
+        db.add(session)
+        db.commit()
+        db.refresh(session)
+
+        return {
+            "session_id": session.id,
+            "document_id": session.document_id,
+            "created_at": session.created_at
+        }
+
+    finally:
+        db.close()
+
+@app.post("/chat")
+async def chat(
+    request: ChatRequest
+):
+    db = SessionLocal()
+
+    try:
+        session = db.get(
+            ChatSession,
+            request.session_id
+        )
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Chat session not found"
+            )
+
+        document_id = session.document_id
+
+        previous_messages = (
+            db.execute(
+                select(ChatMessage)
+                .where(
+                    ChatMessage.session_id
+                    == request.session_id
+                )
+                .order_by(
+                    ChatMessage.id.desc()
+                )
+                .limit(6)
+            )
+            .scalars()
+            .all()
+        )
+
+        previous_messages.reverse()
+
+    finally:
+        db.close()
+
+    retrieval_query = build_retrieval_query(
+        message=request.message,
+        previous_messages=previous_messages
+    )
+
+    chat_history = build_chat_history(
+        previous_messages
+    )
+
+    results = await search_similar_chunks(
+        query=retrieval_query,
+        top_k=request.top_k,
+        max_distance=request.max_distance,
+        document_id=document_id
+    )
+
+    if results:
+        context_data = build_context(
+            results,
+            max_tokens=request.max_context_tokens
+        )
+    else:
+        context_data = {
+            "context": "",
+            "sources": [],
+            "tokens": 0
+        }
+
+    if context_data["context"]:
+        answer = await generate_answer(
+            question=request.message,
+            context=context_data["context"],
+            chat_history=chat_history
+        )
+    else:
+        answer = (
+            "I don't know based on the provided documents."
+        )
+
+    db = SessionLocal()
+
+    try:
+        db.add(
+            ChatMessage(
+                session_id=request.session_id,
+                role="user",
+                content=request.message
+            )
+        )
+
+        db.add(
+            ChatMessage(
+                session_id=request.session_id,
+                role="assistant",
+                content=answer
+            )
+        )
+
+        db.commit()
+
+    except Exception:
+        db.rollback()
+        raise
+
+    finally:
+        db.close()
+
+    return {
+        "session_id": request.session_id,
+        "question": request.message,
+        "answer": answer,
+        "context_tokens": context_data["tokens"],
+        "sources": context_data["sources"]
+    }
+
+
+@app.get(
+    "/chat/sessions/{session_id}/messages"
+)
+def get_chat_messages(
+    session_id: int
+):
+    db = SessionLocal()
+
+    try:
+        session = db.get(
+            ChatSession,
+            session_id
+        )
+
+        if session is None:
+            raise HTTPException(
+                status_code=404,
+                detail="Chat session not found"
+            )
+
+        messages = (
+            db.execute(
+                select(ChatMessage)
+                .where(
+                    ChatMessage.session_id
+                    == session_id
+                )
+                .order_by(ChatMessage.id)
+            )
+            .scalars()
+            .all()
+        )
+
+        return {
+            "session_id": session.id,
+            "document_id": session.document_id,
+            "messages": [
+                {
+                    "id": message.id,
+                    "role": message.role,
+                    "content": message.content,
+                    "created_at": message.created_at
+                }
+                for message in messages
+            ]
+        }
+
+    finally:
+        db.close()
