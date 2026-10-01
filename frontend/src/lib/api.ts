@@ -1,6 +1,7 @@
 import type {
   ChatMessage,
   ChatResponse,
+  ChatSession,
   Document,
 } from "@/types";
 
@@ -131,3 +132,33 @@ export async function getChatMessages(
 
   return data.messages;
 }
+
+
+export async function getChatSessions(
+  documentId: number
+): Promise<ChatSession[]> {
+  const response = await fetch(
+    `${API_URL}/chat/sessions?document_id=${documentId}`
+  );
+
+  const data = await parseResponse<{
+    sessions: ChatSession[];
+  }>(response);
+
+  return data.sessions;
+}
+
+
+export async function deleteChatSession(
+  sessionId: number
+) {
+  const response = await fetch(
+    `${API_URL}/chat/sessions/${sessionId}`,
+    {
+      method: "DELETE",
+    }
+  );
+
+  return parseResponse(response);
+}
+

@@ -1,11 +1,20 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import {
+  useEffect,
+  useRef,
+  useState,
+} from "react";
+
+import type {
+  FormEvent,
+} from "react";
 
 import type {
   ChatMessage,
   Document,
 } from "@/types";
+
 
 type Props = {
   document: Document | null;
@@ -14,13 +23,26 @@ type Props = {
   onSend: (message: string) => void;
 };
 
+
 export default function ChatPanel({
   document,
   messages,
   loading,
   onSend,
 }: Props) {
-  const [message, setMessage] = useState("");
+  const [message, setMessage] =
+    useState("");
+
+  const bottomRef =
+    useRef<HTMLDivElement>(null);
+
+
+  useEffect(() => {
+    bottomRef.current?.scrollIntoView({
+      behavior: "smooth",
+    });
+  }, [messages, loading]);
+
 
   function handleSubmit(
     event: FormEvent<HTMLFormElement>
@@ -34,11 +56,14 @@ export default function ChatPanel({
     }
 
     onSend(value);
+
     setMessage("");
   }
 
+
   return (
     <main className="flex h-screen flex-1 flex-col bg-zinc-900">
+
       <header className="border-b border-zinc-800 px-6 py-4">
         <h2 className="font-medium">
           {document
@@ -47,73 +72,118 @@ export default function ChatPanel({
         </h2>
       </header>
 
+
       <div className="flex-1 overflow-y-auto p-6">
-        {!messages.length && (
+
+        {!messages.length && !loading && (
           <div className="flex h-full items-center justify-center">
+
             <p className="text-zinc-500">
               {document
                 ? "Ask something about this document."
                 : "Select a document to start chatting."}
             </p>
+
           </div>
         )}
 
-        <div className="mx-auto flex max-w-3xl flex-col gap-5">
-          {messages.map((message, index) => (
-            <div
-              key={message.id ?? index}
-              className={
-                message.role === "user"
-                  ? "ml-auto max-w-[75%]"
-                  : "mr-auto max-w-[85%]"
-              }
-            >
-              <div
-                className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
-                  message.role === "user"
-                    ? "bg-white text-black"
-                    : "bg-zinc-800 text-zinc-100"
-                }`}
-              >
-                {message.content}
-              </div>
 
-              {message.sources?.length ? (
-                <div className="mt-2 flex flex-wrap gap-2">
-                  {message.sources.map(
-                    (source) => (
-                      <span
-                        key={source.source_id}
-                        className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400"
-                      >
-                        {source.source_id} · Page{" "}
-                        {source.page ?? "N/A"}
-                      </span>
-                    )
-                  )}
+        {messages.length > 0 && (
+          <div className="mx-auto flex max-w-3xl flex-col gap-5">
+
+            {messages.map(
+              (chatMessage, index) => (
+                <div
+                  key={
+                    chatMessage.id ??
+                    `${chatMessage.role}-${index}`
+                  }
+                  className={
+                    chatMessage.role === "user"
+                      ? "ml-auto max-w-[75%]"
+                      : "mr-auto max-w-[85%]"
+                  }
+                >
+
+                  <div
+                    className={`rounded-2xl px-4 py-3 text-sm leading-6 ${
+                      chatMessage.role === "user"
+                        ? "bg-white text-black"
+                        : "bg-zinc-800 text-zinc-100"
+                    }`}
+                  >
+                    {chatMessage.content}
+                  </div>
+
+
+                  {chatMessage.sources?.length ? (
+                    <div className="mt-2 flex flex-wrap gap-2">
+
+                      {chatMessage.sources.map(
+                        (source) => (
+                          <span
+                            key={source.source_id}
+                            className="rounded-md border border-zinc-700 px-2 py-1 text-xs text-zinc-400"
+                          >
+                            {source.source_id}
+                            {" · "}
+                            Page{" "}
+                            {source.page ?? "N/A"}
+                          </span>
+                        )
+                      )}
+
+                    </div>
+                  ) : null}
+
                 </div>
-              ) : null}
-            </div>
-          ))}
+              )
+            )}
 
-          {loading && (
+
+            {loading && (
+              <p className="text-sm text-zinc-500">
+                Thinking...
+              </p>
+            )}
+
+
+            <div ref={bottomRef} />
+
+          </div>
+        )}
+
+
+        {!messages.length && loading && (
+          <div className="mx-auto max-w-3xl">
             <p className="text-sm text-zinc-500">
               Thinking...
             </p>
-          )}
-        </div>
+
+            <div ref={bottomRef} />
+          </div>
+        )}
+
       </div>
+
 
       <form
         onSubmit={handleSubmit}
         className="border-t border-zinc-800 p-4"
       >
+
         <div className="mx-auto flex max-w-3xl gap-3">
+
           <input
             value={message}
-            disabled={!document || loading}
+            disabled={
+              !document ||
+              loading
+            }
             onChange={(event) =>
-              setMessage(event.target.value)
+              setMessage(
+                event.target.value
+              )
             }
             placeholder={
               document
@@ -123,18 +193,23 @@ export default function ChatPanel({
             className="flex-1 rounded-xl border border-zinc-700 bg-zinc-950 px-4 py-3 text-sm outline-none focus:border-zinc-500"
           />
 
+
           <button
+            type="submit"
             disabled={
               !document ||
               !message.trim() ||
               loading
             }
-            className="rounded-xl bg-white px-5 py-3 text-sm font-medium text-black disabled:opacity-40"
+            className="rounded-xl bg-white px-5 py-3 text-sm font-medium text-black disabled:cursor-not-allowed disabled:opacity-40"
           >
             Send
           </button>
+
         </div>
+
       </form>
+
     </main>
   );
 }
