@@ -14,6 +14,7 @@ from pgvector.sqlalchemy import Vector
 
 from app.database import Base
 
+from sqlalchemy.dialects.postgresql import JSONB
 
 class Document(Base):
     __tablename__ = "documents"
@@ -152,4 +153,8 @@ class ChatMessage(Base):
 
     session: Mapped["ChatSession"] = relationship(
         back_populates="messages"
+    )
+    sources: Mapped[list[dict] | None] = mapped_column(
+    JSONB,
+    nullable=True
     )

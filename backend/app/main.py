@@ -29,6 +29,9 @@ from app.evaluation import evaluate_retrieval_case
 
 from app.context_builder import build_context
 
+from app.hybrid_retrieval import (
+    hybrid_search
+)
 
 app = FastAPI()
 
@@ -603,7 +606,8 @@ async def chat(
             ChatMessage(
                 session_id=request.session_id,
                 role="user",
-                content=request.message
+                content=request.message,
+                
             )
         )
 
@@ -611,7 +615,8 @@ async def chat(
             ChatMessage(
                 session_id=request.session_id,
                 role="assistant",
-                content=answer
+                content=answer,
+                sources=context_data["sources"]
             )
         )
 
@@ -674,6 +679,7 @@ def get_chat_messages(
                     "id": message.id,
                     "role": message.role,
                     "content": message.content,
+                    "sources": message.sources or [],
                     "created_at": message.created_at
                 }
                 for message in messages
@@ -775,3 +781,62 @@ def delete_chat_session(
 
     finally:
         db.close()
+
+
+@app.get("/hybrid-search")
+async def hybrid_search_endpoint(
+    query: str,
+    top_k: int = 5,
+    document_id: int | None = None,
+    max_distance: float | None = None
+):
+    results = await hybrid_search(
+        query=query,
+        top_k=top_k,
+        document_id=document_id,
+        max_distance=max_distance
+    )
+
+    return {
+        "query": query,
+        "results": [
+            {
+                "chunk_id":
+                    result["chunk"].id,
+
+                "document":
+                    result[
+                        "chunk"
+                    ].document.filename,
+
+                "page":
+                    result[
+                        "chunk"
+                    ].page_number,
+
+                "content":
+                    result[
+                        "chunk"
+                    ].content,
+
+                "rrf_score":
+                    result["score"],
+
+                "dense_rank":
+                    result[
+                        "dense_rank"
+                    ],
+
+                "keyword_rank":
+                    result[
+                        "keyword_rank"
+                    ],
+
+                "distance":
+                    result[
+                        "distance"
+                    ]
+            }
+            for result in results
+        ]
+    }
