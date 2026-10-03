@@ -10,10 +10,12 @@ def build_context(
 
     used_tokens = 0
 
-    for index, (chunk, distance) in enumerate(
+    for index, result in enumerate(
         results,
         start=1
     ):
+        chunk = result["chunk"]
+
         source_id = f"S{index}"
 
         part = (
@@ -27,7 +29,10 @@ def build_context(
             part
         )
 
-        if used_tokens + part_tokens > max_tokens:
+        if (
+            used_tokens + part_tokens
+            > max_tokens
+        ):
             break
 
         context_parts.append(
@@ -39,7 +44,10 @@ def build_context(
             "chunk_id": chunk.id,
             "document": chunk.document.filename,
             "page": chunk.page_number,
-            "distance": float(distance)
+            "distance": result.get("distance"),
+            "rrf_score": result.get("score"),
+            "dense_rank": result.get("dense_rank"),
+            "keyword_rank": result.get("keyword_rank")
         })
 
         used_tokens += part_tokens
