@@ -110,6 +110,7 @@ export async function sendChatMessage(
         top_k: 3,
         max_distance: 0.4,
         max_context_tokens: 2000,
+        retrieval_strategy: "hybrid",
       }),
     }
   );

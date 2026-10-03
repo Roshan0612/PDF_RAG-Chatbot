@@ -12,7 +12,12 @@ export type Source = {
   chunk_id: number;
   document: string;
   page: number | null;
-  distance: number;
+
+  distance: number | null;
+  rrf_score?: number | null;
+
+  dense_rank?: number | null;
+  keyword_rank?: number | null;
 };
 
 export type ChatMessage = {
