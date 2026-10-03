@@ -32,6 +32,9 @@ from app.context_builder import build_context
 from app.hybrid_retrieval import (
     hybrid_search
 )
+from typing import Literal
+
+from app.retriever import retrieve_chunks
 
 app = FastAPI()
 
@@ -65,10 +68,14 @@ class CreateChatSessionRequest(BaseModel):
 class ChatRequest(BaseModel):
     session_id: int
     message: str
-    top_k: int = 3
+    top_k: int = 5
     max_distance: float = 0.4
     max_context_tokens: int = 2000
 
+    retrieval_strategy: Literal[
+        "dense",
+        "hybrid"
+    ] = "hybrid"
 
 @app.get("/")
 def root():
@@ -194,22 +201,30 @@ async def search(
 @app.get("/rag")
 async def rag(
     question: str,
-    top_k: int = 3,
+    top_k: int = 5,
     max_distance: float = 0.4,
     document_id: int | None = None,
-    max_context_tokens: int = 2000
+    max_context_tokens: int = 2000,
+    retrieval_strategy: Literal[
+        "dense",
+        "hybrid"
+    ] = "hybrid"
 ):
-    results = await search_similar_chunks(
+    results = await retrieve_chunks(
         query=question,
         top_k=top_k,
         max_distance=max_distance,
-        document_id=document_id
+        document_id=document_id,
+        strategy=retrieval_strategy
     )
 
     if not results:
         return {
             "question": question,
-            "answer": "I don't know based on the provided documents.",
+            "answer": (
+                "I don't know based on "
+                "the provided documents."
+            ),
             "sources": []
         }
 
@@ -221,7 +236,10 @@ async def rag(
     if not context_data["context"]:
         return {
             "question": question,
-            "answer": "I don't know based on the provided documents.",
+            "answer": (
+                "I don't know based on "
+                "the provided documents."
+            ),
             "sources": []
         }
 
@@ -233,9 +251,12 @@ async def rag(
     return {
         "question": question,
         "answer": answer,
+        "retrieval_strategy": retrieval_strategy,
         "context_tokens": context_data["tokens"],
         "sources": context_data["sources"]
     }
+
+
 @app.post("/ingest-pdf")
 async def ingest_pdf(
     file: UploadFile = File(...)
@@ -569,11 +590,12 @@ async def chat(
         previous_messages
     )
 
-    results = await search_similar_chunks(
+    results = await retrieve_chunks(
         query=retrieval_query,
         top_k=request.top_k,
         max_distance=request.max_distance,
-        document_id=document_id
+        document_id=document_id,
+        strategy=request.retrieval_strategy
     )
 
     if results:
