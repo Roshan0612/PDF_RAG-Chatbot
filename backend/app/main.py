@@ -137,7 +137,6 @@ async def create_test_document():
     db = SessionLocal()
 
     try:
-        # Create the document
         document = Document(
             filename="test-handbook.txt"
         )
@@ -146,10 +145,8 @@ async def create_test_document():
         db.commit()
         db.refresh(document)
 
-        # Create one database row for every chunk
         for text_content in texts:
 
-            # Convert text → embedding vector
             vector = await create_embedding(text_content)
 
             chunk = DocumentChunk(

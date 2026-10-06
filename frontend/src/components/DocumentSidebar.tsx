@@ -80,8 +80,6 @@ export default function DocumentSidebar({
 
       <div className="flex flex-1 flex-col overflow-y-auto">
 
-        {/* Documents */}
-
         <p className="mb-3 text-xs uppercase tracking-wider text-zinc-500">
           Documents
         </p>
@@ -134,8 +132,6 @@ export default function DocumentSidebar({
             </p>
           )}
         </div>
-
-        {/* Chats */}
 
         {selectedDocumentId !== null && (
           <div className="mt-6 border-t border-zinc-800 pt-4">
